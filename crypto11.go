@@ -163,6 +163,9 @@ func findToken(slots []uint, serial string, label string) (uint, *pkcs11.TokenIn
 		if err != nil {
 			return 0, nil, err
 		}
+		if len(serial) + len(label) == 0 {
+			return slot, &tokenInfo, nil
+		}
 		if tokenInfo.SerialNumber == serial {
 			return slot, &tokenInfo, nil
 		}

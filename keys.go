@@ -44,6 +44,9 @@ func (object *PKCS11Object) Identify() (id []byte, label []byte, err error) {
 	return a[0].Value, a[1].Value, nil
 }
 
+/// XXXXXXX => LABEL ON YUBIKEY IS DIFFERENT!!!!!!!
+
+
 // Find a key object.  For asymmetric keys this only finds one half so
 // callers will call it twice.
 func findKey(session *PKCS11Session, id []byte, label []byte, keyclass uint, keytype uint) (obj pkcs11.ObjectHandle, err error) {
@@ -120,9 +123,11 @@ func FindKeyPairOnSession(session *PKCS11Session, slot uint, id []byte, label []
 		return nil, err
 	}
 	keyType := bytesToUlong(attributes[0].Value)
+
 	if pubHandle, err = findKey(session, id, label, pkcs11.CKO_PUBLIC_KEY, keyType); err != nil {
 		return nil, err
 	}
+
 	switch keyType {
 	case pkcs11.CKK_DSA:
 		if pub, err = exportDSAPublicKey(session, pubHandle); err != nil {
@@ -142,6 +147,15 @@ func FindKeyPairOnSession(session *PKCS11Session, slot uint, id []byte, label []
 	default:
 		return nil, ErrUnsupportedKeyType
 	}
+}
+
+// ExecOnSession executes a callback on the default session for the instance. Configure must have been called
+// and a session should be available
+func ExecOnSession(cb func (session *PKCS11Session) error) (err error) {
+	if err = ensureSessions(instance, instance.slot); err != nil {
+		return err
+	}
+	return withSession(instance.slot, cb)
 }
 
 // Public returns the public half of a private key.
