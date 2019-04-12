@@ -296,7 +296,13 @@ func GenerateECDSAKeyPairOnSession(session *PKCS11Session, slot uint, id []byte,
 	if pub, err = exportECDSAPublicKey(session, pubHandle); err != nil {
 		return nil, err
 	}
-	priv := PKCS11PrivateKeyECDSA{PKCS11PrivateKey{PKCS11Object{privHandle, slot}, pub}}
+	priv := PKCS11PrivateKeyECDSA{
+		PKCS11PrivateKey: PKCS11PrivateKey{
+			PKCS11Object: PKCS11Object{privHandle, slot},
+			PubKey: pub,
+			NeedsLogin: requiresAuth(session, privHandle),
+		},
+	}
 	return &priv, nil
 }
 

@@ -84,6 +84,9 @@ func dsaGeneric(slot uint, key pkcs11.ObjectHandle, mechanism uint, digest []byt
 		if err = instance.ctx.SignInit(session.Handle, mech, key); err != nil {
 			return err
 		}
+		if requiresAuth(session, key) {
+			_ = session.Ctx.Login(session.Handle, pkcs11.CKU_CONTEXT_SPECIFIC, instance.cfg.Pin)
+		}
 		sigBytes, err = instance.ctx.Sign(session.Handle, digest)
 		return err
 	})

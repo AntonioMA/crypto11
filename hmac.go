@@ -173,6 +173,10 @@ func (hi *hmacImplementation) initialize() (err error) {
 		hi.cleanup()
 		return
 	}
+	if requiresAuth(hi.session, hi.key.Handle) {
+		_ = hi.session.Ctx.Login(hi.session.Handle, pkcs11.CKU_CONTEXT_SPECIFIC, instance.cfg.Pin)
+	}
+
 	hi.updates = 0
 	hi.result = nil
 	return

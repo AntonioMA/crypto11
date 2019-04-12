@@ -136,7 +136,13 @@ func GenerateDSAKeyPairOnSession(session *PKCS11Session, slot uint, id []byte, l
 	if pub, err = exportDSAPublicKey(session, pubHandle); err != nil {
 		return nil, err
 	}
-	priv := PKCS11PrivateKeyDSA{PKCS11PrivateKey{PKCS11Object{privHandle, slot}, pub}}
+	priv := PKCS11PrivateKeyDSA{
+		PKCS11PrivateKey: PKCS11PrivateKey{
+			PKCS11Object: PKCS11Object{privHandle, slot},
+			PubKey:       pub,
+			NeedsLogin:   requiresAuth(session, privHandle),
+		},
+	}
 	return &priv, nil
 }
 

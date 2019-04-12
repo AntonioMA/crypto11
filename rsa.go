@@ -162,7 +162,13 @@ func GenerateRSAKeyPairOnSession(session *PKCS11Session, slot uint, id []byte, l
 	if pub, err = exportRSAPublicKey(session, pubHandle); err != nil {
 		return nil, err
 	}
-	priv := PKCS11PrivateKeyRSA{PKCS11PrivateKey{PKCS11Object{privHandle, slot}, pub}}
+	priv := PKCS11PrivateKeyRSA{
+		PKCS11PrivateKey: PKCS11PrivateKey{
+			PKCS11Object: PKCS11Object{privHandle, slot},
+			PubKey:       pub,
+			NeedsLogin:   requiresAuth(session, privHandle),
+		},
+	}
 	return &priv, nil
 }
 
@@ -268,6 +274,9 @@ func signPSS(session *PKCS11Session, key *PKCS11PrivateKeyRSA, digest []byte, op
 	if err = session.Ctx.SignInit(session.Handle, mech, key.Handle); err != nil {
 		return nil, err
 	}
+	if key.PKCS11PrivateKey.NeedsLogin {
+		_ = session.Ctx.Login(session.Handle, pkcs11.CKU_CONTEXT_SPECIFIC, instance.cfg.Pin)
+	}
 	return session.Ctx.Sign(session.Handle, digest)
 }
 
@@ -287,6 +296,10 @@ func signPKCS1v15(session *PKCS11Session, key *PKCS11PrivateKeyRSA, digest []byt
 	copy(T[len(oid):], digest)
 	mech := []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_RSA_PKCS, nil)}
 	err = session.Ctx.SignInit(session.Handle, mech, key.Handle)
+	if key.PKCS11PrivateKey.NeedsLogin {
+		_ = session.Ctx.Login(session.Handle, pkcs11.CKU_CONTEXT_SPECIFIC, instance.cfg.Pin)
+	}
+
 	if err == nil {
 		signature, err = session.Ctx.Sign(session.Handle, T)
 	}

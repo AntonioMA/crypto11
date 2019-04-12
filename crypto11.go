@@ -123,6 +123,7 @@ type PKCS11Object struct {
 	// This is used internally to find a session handle that can
 	// access this object.
 	Slot uint
+
 }
 
 // PKCS11PrivateKey contains a reference to a loaded PKCS#11 private key object.
@@ -131,6 +132,9 @@ type PKCS11PrivateKey struct {
 
 	// The corresponding public key
 	PubKey crypto.PublicKey
+
+	// Marks if using the object requires context login
+	NeedsLogin bool
 }
 
 // In a former design we carried around the object handle for the

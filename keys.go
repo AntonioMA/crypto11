@@ -27,6 +27,18 @@ import (
 	pkcs11 "github.com/miekg/pkcs11"
 )
 
+
+// Returns true if the Object has CKA_ALWAYS_AUTHENTICATE set to 1
+func requiresAuth(session *PKCS11Session, oh pkcs11.ObjectHandle) bool {
+	atts, err := session.Ctx.GetAttributeValue(session.Handle, oh, []*pkcs11.Attribute{
+		{Type: pkcs11.CKA_ALWAYS_AUTHENTICATE},
+	})
+	if err != nil { // Well, technically this is true ;)
+		return false
+	}
+	return len(atts) > 0 && atts[0].Value[0] != 0
+}
+
 // Identify returns the ID and label for a PKCS#11 object.
 //
 // Either of these values may be used to retrieve the key for later use.
@@ -43,9 +55,6 @@ func (object *PKCS11Object) Identify() (id []byte, label []byte, err error) {
 	}
 	return a[0].Value, a[1].Value, nil
 }
-
-/// XXXXXXX => LABEL ON YUBIKEY IS DIFFERENT!!!!!!!
-
 
 // Find a key object.  For asymmetric keys this only finds one half so
 // callers will call it twice.
@@ -133,17 +142,35 @@ func FindKeyPairOnSession(session *PKCS11Session, slot uint, id []byte, label []
 		if pub, err = exportDSAPublicKey(session, pubHandle); err != nil {
 			return nil, err
 		}
-		return &PKCS11PrivateKeyDSA{PKCS11PrivateKey{PKCS11Object{privHandle, slot}, pub}}, nil
+		return &PKCS11PrivateKeyDSA{
+			PKCS11PrivateKey: PKCS11PrivateKey{
+				PKCS11Object: PKCS11Object{privHandle, slot},
+				PubKey:       pub,
+				NeedsLogin:   requiresAuth(session, privHandle),
+			},
+		}, nil
 	case pkcs11.CKK_RSA:
 		if pub, err = exportRSAPublicKey(session, pubHandle); err != nil {
 			return nil, err
 		}
-		return &PKCS11PrivateKeyRSA{PKCS11PrivateKey{PKCS11Object{privHandle, slot}, pub}}, nil
+		return &PKCS11PrivateKeyRSA{
+			PKCS11PrivateKey: PKCS11PrivateKey{
+				PKCS11Object: PKCS11Object{privHandle, slot},
+				PubKey:       pub,
+				NeedsLogin:   requiresAuth(session, privHandle),
+			},
+		}, nil
 	case pkcs11.CKK_ECDSA:
 		if pub, err = exportECDSAPublicKey(session, pubHandle); err != nil {
 			return nil, err
 		}
-		return &PKCS11PrivateKeyECDSA{PKCS11PrivateKey{PKCS11Object{privHandle, slot}, pub}}, nil
+		return &PKCS11PrivateKeyECDSA{
+			PKCS11PrivateKey: PKCS11PrivateKey{
+				PKCS11Object: PKCS11Object{privHandle, slot},
+				PubKey:       pub,
+				NeedsLogin:   requiresAuth(session, privHandle),
+			},
+		}, nil
 	default:
 		return nil, ErrUnsupportedKeyType
 	}
