@@ -134,7 +134,7 @@ type PKCS11PrivateKey struct {
 	PubKey crypto.PublicKey
 
 	// Marks if using the object requires context login
-	NeedsLogin bool
+	NeedsContextLogin bool
 }
 
 // In a former design we carried around the object handle for the

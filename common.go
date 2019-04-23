@@ -75,7 +75,7 @@ func (sig *dsaSignature) marshalDER() ([]byte, error) {
 }
 
 // Compute *DSA signature and marshal the result in DER form
-func dsaGeneric(slot uint, key pkcs11.ObjectHandle, mechanism uint, digest []byte) ([]byte, error) {
+func dsaGeneric(slot uint, key pkcs11.ObjectHandle, mechanism uint, digest []byte, pvk PKCS11PrivateKey) ([]byte, error) {
 	var err error
 	var sigBytes []byte
 	var sig dsaSignature
@@ -84,10 +84,7 @@ func dsaGeneric(slot uint, key pkcs11.ObjectHandle, mechanism uint, digest []byt
 		if err = instance.ctx.SignInit(session.Handle, mech, key); err != nil {
 			return err
 		}
-		if requiresAuth(session, key) {
-			_ = session.Ctx.Login(session.Handle, pkcs11.CKU_CONTEXT_SPECIFIC, instance.cfg.Pin)
-		}
-		sigBytes, err = instance.ctx.Sign(session.Handle, digest)
+		sigBytes, err = withContextLogin(session, pvk, session.Ctx.Sign, digest)
 		return err
 	})
 	if err != nil {

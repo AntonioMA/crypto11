@@ -138,9 +138,9 @@ func GenerateDSAKeyPairOnSession(session *PKCS11Session, slot uint, id []byte, l
 	}
 	priv := PKCS11PrivateKeyDSA{
 		PKCS11PrivateKey: PKCS11PrivateKey{
-			PKCS11Object: PKCS11Object{privHandle, slot},
-			PubKey:       pub,
-			NeedsLogin:   requiresAuth(session, privHandle),
+			PKCS11Object:      PKCS11Object{privHandle, slot},
+			PubKey:            pub,
+			NeedsContextLogin: requiresAuth(session, privHandle, pkcs11.CKK_DSA),
 		},
 	}
 	return &priv, nil
@@ -154,5 +154,5 @@ func GenerateDSAKeyPairOnSession(session *PKCS11Session, slot uint, id []byte, l
 //
 // The return value is a DER-encoded byteblock.
 func (signer *PKCS11PrivateKeyDSA) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
-	return dsaGeneric(signer.Slot, signer.Handle, pkcs11.CKM_DSA, digest)
+	return dsaGeneric(signer.Slot, signer.Handle, pkcs11.CKM_DSA, digest, signer.PKCS11PrivateKey)
 }

@@ -27,16 +27,69 @@ import (
 	pkcs11 "github.com/miekg/pkcs11"
 )
 
+const (
+	CKS_RO_PUBLIC_SESSION = 0x0
+	CKS_RO_USER_FUNCTIONS = 0x1
+	CKS_RW_PUBLIC_SESSION = 0x2
+	CKS_RW_USER_FUNCTIONS = 0x3
+	CKS_RW_SO_FUNCTIONS   = 0x4
+)
+
+func getTestSignMechanism(keyType uint) []*pkcs11.Mechanism {
+	switch keyType {
+	case pkcs11.CKK_DSA:
+		return []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_DSA, nil)}
+	case pkcs11.CKK_RSA:
+		return []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_RSA_PKCS, nil)}
+	case pkcs11.CKK_ECDSA:
+		return []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_ECDSA, nil)}
+	default:
+		return nil
+	}
+}
 
 // Returns true if the Object has CKA_ALWAYS_AUTHENTICATE set to 1
-func requiresAuth(session *PKCS11Session, oh pkcs11.ObjectHandle) bool {
+func requiresAuth(session *PKCS11Session, oh pkcs11.ObjectHandle, keyType uint) bool {
 	atts, err := session.Ctx.GetAttributeValue(session.Handle, oh, []*pkcs11.Attribute{
 		{Type: pkcs11.CKA_ALWAYS_AUTHENTICATE},
 	})
-	if err != nil { // Well, technically this is true ;)
+	if err == nil && len(atts) > 0 && atts[0].Value[0] != 0 {
+		return true
+	}
+
+	// At this point we should be able to return false but... some tokens (namely Yubikey) might still
+	// require context login for some keys even if they shouldn't. So let's just try using the key
+	// and see what happens...
+	si, _ := session.Ctx.GetSessionInfo(session.Handle)
+	if si.State == CKS_RW_PUBLIC_SESSION || si.State == CKS_RO_PUBLIC_SESSION && instance.cfg.Pin != "" {
+		err = session.Ctx.Login(session.Handle, pkcs11.CKU_USER, instance.cfg.Pin)
+		if err != nil {
+			// This might be because we cannot login, or because the pin is not right... anyway...
+			return false
+		}
+	}
+
+	// Hopefully at this point we're logged in... let's try using the key and see what happens...
+	if err = session.Ctx.SignInit(session.Handle, getTestSignMechanism(keyType), oh); err != nil {
 		return false
 	}
-	return len(atts) > 0 && atts[0].Value[0] != 0
+
+	_, err = session.Ctx.Sign(session.Handle, []byte{0xab, 0xcd, 0xca, 0xfe})
+	return shouldRetryAfterLogin(err)
+
+}
+
+type keyOpFn func(pkcs11.SessionHandle, []byte) ([]byte, error)
+
+// Tries to execute a key operation (sign, decrypt...) trying to use context login when needed...
+func withContextLogin(
+	session *PKCS11Session, pvk PKCS11PrivateKey, keyOp keyOpFn, data []byte) ([]byte, error) {
+
+	if pvk.NeedsContextLogin && instance.cfg.Pin != "" {
+		_ = session.Ctx.Login(session.Handle, pkcs11.CKU_CONTEXT_SPECIFIC, instance.cfg.Pin)
+	}
+	return keyOp(session.Handle, data)
+
 }
 
 // Identify returns the ID and label for a PKCS#11 object.
@@ -144,9 +197,9 @@ func FindKeyPairOnSession(session *PKCS11Session, slot uint, id []byte, label []
 		}
 		return &PKCS11PrivateKeyDSA{
 			PKCS11PrivateKey: PKCS11PrivateKey{
-				PKCS11Object: PKCS11Object{privHandle, slot},
-				PubKey:       pub,
-				NeedsLogin:   requiresAuth(session, privHandle),
+				PKCS11Object:      PKCS11Object{privHandle, slot},
+				PubKey:            pub,
+				NeedsContextLogin: requiresAuth(session, privHandle, keyType),
 			},
 		}, nil
 	case pkcs11.CKK_RSA:
@@ -155,9 +208,9 @@ func FindKeyPairOnSession(session *PKCS11Session, slot uint, id []byte, label []
 		}
 		return &PKCS11PrivateKeyRSA{
 			PKCS11PrivateKey: PKCS11PrivateKey{
-				PKCS11Object: PKCS11Object{privHandle, slot},
-				PubKey:       pub,
-				NeedsLogin:   requiresAuth(session, privHandle),
+				PKCS11Object:      PKCS11Object{privHandle, slot},
+				PubKey:            pub,
+				NeedsContextLogin: requiresAuth(session, privHandle, keyType),
 			},
 		}, nil
 	case pkcs11.CKK_ECDSA:
@@ -166,9 +219,9 @@ func FindKeyPairOnSession(session *PKCS11Session, slot uint, id []byte, label []
 		}
 		return &PKCS11PrivateKeyECDSA{
 			PKCS11PrivateKey: PKCS11PrivateKey{
-				PKCS11Object: PKCS11Object{privHandle, slot},
-				PubKey:       pub,
-				NeedsLogin:   requiresAuth(session, privHandle),
+				PKCS11Object:      PKCS11Object{privHandle, slot},
+				PubKey:            pub,
+				NeedsContextLogin: requiresAuth(session, privHandle, keyType),
 			},
 		}, nil
 	default:

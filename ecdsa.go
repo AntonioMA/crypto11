@@ -298,9 +298,9 @@ func GenerateECDSAKeyPairOnSession(session *PKCS11Session, slot uint, id []byte,
 	}
 	priv := PKCS11PrivateKeyECDSA{
 		PKCS11PrivateKey: PKCS11PrivateKey{
-			PKCS11Object: PKCS11Object{privHandle, slot},
-			PubKey: pub,
-			NeedsLogin: requiresAuth(session, privHandle),
+			PKCS11Object:      PKCS11Object{privHandle, slot},
+			PubKey:            pub,
+			NeedsContextLogin: requiresAuth(session, privHandle, pkcs11.CKK_ECDSA),
 		},
 	}
 	return &priv, nil
@@ -314,5 +314,5 @@ func GenerateECDSAKeyPairOnSession(session *PKCS11Session, slot uint, id []byte,
 //
 // The return value is a DER-encoded byteblock.
 func (signer *PKCS11PrivateKeyECDSA) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
-	return dsaGeneric(signer.Slot, signer.Handle, pkcs11.CKM_ECDSA, digest)
+	return dsaGeneric(signer.Slot, signer.Handle, pkcs11.CKM_ECDSA, digest, signer.PKCS11PrivateKey)
 }

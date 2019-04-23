@@ -101,6 +101,14 @@ func (p *sessionPool) PutIfAbsent(slot uint, pool *pools.ResourcePool) error {
 	return nil
 }
 
+func shouldRetryAfterLogin(err error) bool {
+	if err != nil {
+		perr, ok := err.(pkcs11.Error)
+		return ok && perr == pkcs11.CKR_USER_NOT_LOGGED_IN && instance.cfg.Pin != ""
+	}
+	return false
+}
+
 // Run a function with a session
 //
 // setupSessions must have been called for the slot already, otherwise
@@ -126,20 +134,16 @@ func withSession(slot uint, f func(session *PKCS11Session) error) error {
 
 	s := session.(*PKCS11Session)
 	err = f(s)
-	if err != nil {
+	if shouldRetryAfterLogin(err) {
 		// if a request required login, then try to login
-		if perr, ok := err.(pkcs11.Error); ok && perr == pkcs11.CKR_USER_NOT_LOGGED_IN && instance.cfg.Pin != "" {
-			if err = s.Ctx.Login(s.Handle, pkcs11.CKU_USER, instance.cfg.Pin); err != nil {
-				return err
-			}
-			// retry after login
-			return f(s)
+		if err = s.Ctx.Login(s.Handle, pkcs11.CKU_USER, instance.cfg.Pin); err != nil {
+			return err
 		}
-
-		return err
+		// retry after login
+		return f(s)
 	}
 
-	return nil
+	return err
 }
 
 // Ensures that sessions are setup.
